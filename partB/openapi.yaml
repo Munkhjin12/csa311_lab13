@@ -1,0 +1,403 @@
+openapi: "3.0.3"
+info:
+  title: Personal Task Tracker API
+  description: |
+    F.CSM311 Бие даалт 13 — Personal Task Tracker REST API.
+    Даалгавар CRUD, tag, filter, search, overdue detection.
+  version: "1.0.0"
+  contact:
+    name: F.CSM311 Student
+    email: student@must.edu.mn
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+
+tags:
+  - name: Tasks
+    description: Даалгаврын удирдлага
+  - name: Tags
+    description: Шошгоны удирдлага
+  - name: System
+    description: Системийн endpoint
+
+paths:
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: Бүх даалгавар авах
+      description: Filter, search, pagination дэмжинэ
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, in-progress, done]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high]
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Гарчиг болон тайлбараар хайх
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Амжилттай
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  tasks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+    post:
+      tags: [Tasks]
+      summary: Шинэ даалгавар үүсгэх
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskInput"
+      responses:
+        "201":
+          description: Үүсгэгдлээ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /tasks/overdue:
+    get:
+      tags: [Tasks]
+      summary: Хоцорсон даалгаврууд
+      description: due_date нь өнгөрсөн, status нь done биш
+      responses:
+        "200":
+          description: Амжилттай
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
+                  count:
+                    type: integer
+
+  /tasks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+
+    get:
+      tags: [Tasks]
+      summary: Нэг даалгавар авах
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskSuccess"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [Tasks]
+      summary: Даалгавар засах
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskSuccess"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [Tasks]
+      summary: Даалгавар устгах
+      responses:
+        "200":
+          description: Устгагдлаа
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tasks/{id}/tags/{tagId}:
+    post:
+      tags: [Tasks]
+      summary: Даалгаварт tag нэмэх
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: tagId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          $ref: "#/components/responses/TaskSuccess"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tags:
+    get:
+      tags: [Tags]
+      summary: Бүх tag авах
+      responses:
+        "200":
+          description: Амжилттай
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tag"
+
+    post:
+      tags: [Tags]
+      summary: Шинэ tag үүсгэх
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 50
+                color:
+                  type: string
+                  pattern: "^#[0-9a-fA-F]{6}$"
+                  example: "#6366f1"
+      responses:
+        "201":
+          description: Үүсгэгдлээ
+        "409":
+          description: Ийм нэртэй tag байна
+
+  /tags/{id}:
+    delete:
+      tags: [Tags]
+      summary: Tag устгах
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Устгагдлаа
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  schemas:
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Бие даалт дуусгах"
+        description:
+          type: string
+          example: "F.CSM311 AI бие даалт"
+        status:
+          type: string
+          enum: [pending, in-progress, done]
+          example: "in-progress"
+        priority:
+          type: string
+          enum: [low, medium, high]
+          example: "high"
+        due_date:
+          type: string
+          nullable: true
+          format: date
+          example: "2025-04-28"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["сургууль", "яаралтай"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateTaskInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        status:
+          type: string
+          enum: [pending, in-progress, done]
+          default: pending
+        priority:
+          type: string
+          enum: [low, medium, high]
+          default: medium
+        due_date:
+          type: string
+          nullable: true
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+
+    UpdateTaskInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        status:
+          type: string
+          enum: [pending, in-progress, done]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        due_date:
+          type: string
+          nullable: true
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    SuccessMessage:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+
+    TaskResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Task"
+        message:
+          type: string
+
+  responses:
+    TaskSuccess:
+      description: Амжилттай
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TaskResponse"
+    NotFound:
+      description: Олдсонгүй
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: "Даалгавар олдсонгүй"
+    ValidationError:
+      description: Validation алдаа
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+              details:
+                type: array
+                items:
+                  type: object

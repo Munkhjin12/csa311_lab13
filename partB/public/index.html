@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Task Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+    h1 { color: #4f46e5; margin-bottom: 20px; font-size: 1.8rem; }
+
+    .form-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    input, select, textarea { border: 1px solid #ddd; border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; width: 100%; }
+    input:focus, select:focus { outline: none; border-color: #4f46e5; }
+    textarea { resize: vertical; min-height: 60px; }
+    .form-group { flex: 1; min-width: 150px; margin-bottom: 10px; }
+    label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 4px; }
+    button { background: #4f46e5; color: white; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-size: 0.9rem; }
+    button:hover { background: #4338ca; }
+    button.danger { background: #ef4444; }
+    button.danger:hover { background: #dc2626; }
+    button.secondary { background: #6b7280; }
+
+    .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filters select { width: auto; }
+
+    .task-list { display: flex; flex-direction: column; gap: 10px; }
+    .task-card { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); display: flex; justify-content: space-between; align-items: flex-start; }
+    .task-card.overdue { border-left: 4px solid #ef4444; }
+    .task-card.done { opacity: 0.6; }
+    .task-info h3 { font-size: 1rem; margin-bottom: 4px; }
+    .task-info p { font-size: 0.85rem; color: #666; }
+    .badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+    .badge.high { background: #fee2e2; color: #dc2626; }
+    .badge.medium { background: #fef3c7; color: #d97706; }
+    .badge.low { background: #d1fae5; color: #065f46; }
+    .badge.pending { background: #e0e7ff; color: #4338ca; }
+    .badge.in-progress { background: #fef9c3; color: #a16207; }
+    .badge.done { background: #d1fae5; color: #065f46; }
+    .task-actions { display: flex; gap: 6px; }
+    .task-actions button { padding: 6px 12px; font-size: 0.8rem; }
+
+    .status-bar { text-align: center; color: #666; font-size: 0.9rem; margin: 20px 0; }
+    .error { background: #fee2e2; color: #dc2626; padding: 10px; border-radius: 8px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📋 Task Tracker</h1>
+
+    <!-- Шинэ даалгавар форм -->
+    <div class="form-card">
+      <h2 style="margin-bottom:12px;font-size:1rem;">Шинэ даалгавар</h2>
+      <div class="form-group">
+        <label>Гарчиг *</label>
+        <input id="title" placeholder="Даалгаврын гарчиг..." />
+      </div>
+      <div class="form-group">
+        <label>Тайлбар</label>
+        <textarea id="description" placeholder="Тайлбар..."></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Тэргүүлэх чиглэл</label>
+          <select id="priority">
+            <option value="low">Бага</option>
+            <option value="medium" selected>Дунд</option>
+            <option value="high">Өндөр</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Хугацаа</label>
+          <input type="date" id="due_date" />
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end;">
+          <button onclick="createTask()">+ Нэмэх</button>
+        </div>
+      </div>
+      <div id="error" class="error" style="display:none;"></div>
+    </div>
+
+    <!-- Filter -->
+    <div class="filters">
+      <select id="filterStatus" onchange="loadTasks()">
+        <option value="">Бүх статус</option>
+        <option value="pending">Хүлээгдэж буй</option>
+        <option value="in-progress">Явагдаж буй</option>
+        <option value="done">Дууссан</option>
+      </select>
+      <select id="filterPriority" onchange="loadTasks()">
+        <option value="">Бүх тэргүүлэлт</option>
+        <option value="high">Өндөр</option>
+        <option value="medium">Дунд</option>
+        <option value="low">Бага</option>
+      </select>
+      <input id="search" placeholder="Хайх..." oninput="loadTasks()" style="width:180px;" />
+    </div>
+
+    <div id="statusBar" class="status-bar">Ачааллаж байна...</div>
+    <div id="taskList" class="task-list"></div>
+  </div>
+
+  <script>
+    const API = '/api/v1';
+
+    async function loadTasks() {
+      const status = document.getElementById('filterStatus').value;
+      const priority = document.getElementById('filterPriority').value;
+      const search = document.getElementById('search').value;
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (priority) params.set('priority', priority);
+      if (search) params.set('search', search);
+
+      const res = await fetch(`${API}/tasks?${params}`);
+      const data = await res.json();
+      renderTasks(data.tasks || [], data.pagination);
+    }
+
+    function renderTasks(tasks, pagination) {
+      const list = document.getElementById('taskList');
+      const bar = document.getElementById('statusBar');
+      bar.textContent = `Нийт: ${pagination?.total ?? tasks.length} даалгавар`;
+
+      if (!tasks.length) {
+        list.innerHTML = '<div class="status-bar">Даалгавар байхгүй байна</div>';
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      list.innerHTML = tasks.map(t => {
+        const isOverdue = t.due_date && t.due_date < today && t.status !== 'done';
+        const priorityLabel = { low: 'Бага', medium: 'Дунд', high: 'Өндөр' }[t.priority];
+        const statusLabel = { pending: 'Хүлээгдэж буй', 'in-progress': 'Явагдаж буй', done: 'Дууссан' }[t.status];
+        return `
+          <div class="task-card ${isOverdue ? 'overdue' : ''} ${t.status === 'done' ? 'done' : ''}">
+            <div class="task-info">
+              <h3>${escHtml(t.title)}</h3>
+              ${t.description ? `<p>${escHtml(t.description)}</p>` : ''}
+              ${t.due_date ? `<p>📅 ${t.due_date}${isOverdue ? ' ⚠️ Хоцорсон' : ''}</p>` : ''}
+              <div class="badges">
+                <span class="badge ${t.priority}">${priorityLabel}</span>
+                <span class="badge ${t.status}">${statusLabel}</span>
+                ${(t.tags || []).map(tag => `<span class="badge" style="background:#e0e7ff;color:#4338ca">#${escHtml(tag)}</span>`).join('')}
+              </div>
+            </div>
+            <div class="task-actions">
+              ${t.status !== 'done' ? `<button onclick="markDone(${t.id})">✓</button>` : ''}
+              <button class="danger" onclick="deleteTask(${t.id})">✕</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function createTask() {
+      const title = document.getElementById('title').value.trim();
+      const errorEl = document.getElementById('error');
+      if (!title) { showError('Гарчиг заавал'); return; }
+
+      const body = {
+        title,
+        description: document.getElementById('description').value,
+        priority: document.getElementById('priority').value,
+        due_date: document.getElementById('due_date').value || null,
+      };
+
+      const res = await fetch(`${API}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (!data.success) { showError(data.error); return; }
+      errorEl.style.display = 'none';
+      document.getElementById('title').value = '';
+      document.getElementById('description').value = '';
+      document.getElementById('due_date').value = '';
+      loadTasks();
+    }
+
+    async function markDone(id) {
+      await fetch(`${API}/tasks/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+      });
+      loadTasks();
+    }
+
+    async function deleteTask(id) {
+      if (!confirm('Устгах уу?')) return;
+      await fetch(`${API}/tasks/${id}`, { method: 'DELETE' });
+      loadTasks();
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    loadTasks();
+  </script>
+</body>
+</html>
